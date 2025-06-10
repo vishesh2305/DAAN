@@ -11,6 +11,7 @@
     "hardhat": "^2.19.1"
   },
   "dependencies": {
+    "@openzeppelin/contracts": "^4.9.3",
     "@thirdweb-dev/contracts": "^3.8.0",
     "zksync-ethers": "^5.7.0"
   }

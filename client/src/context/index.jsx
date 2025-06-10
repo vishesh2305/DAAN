@@ -7,7 +7,7 @@ import { ChainId, EditionMetadataWithOwnerOutputSchema } from '@thirdweb-dev/sdk
 const StateContext = createContext();
 
 export const StateContextProvider = ({ children }) => {
-  const { contract } = useContract('0x17492DfC8f2dbA5DceBB3A7a5dA7a80Ba3bBa620',
+  const { contract } = useContract('0xC3769C580B4BE4fD76E2Cf3dC5B33dF187941A41',
     'custom',
     {
         chainId: ChainId.sepolia,
