@@ -3,6 +3,14 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+
+interface IWETHGateway {
+    function depositETH(address pool, address onBehalfOf, uint16 referralCode) external payable;
+    function withdrawETH(address pool , uint256 amount, address to) external;
+}
+
+
+
 contract CrowdFunding is ReentrancyGuard{
     struct Campaign{
         address owner;
@@ -18,6 +26,26 @@ contract CrowdFunding is ReentrancyGuard{
 }
     mapping(uint256 => Campaign)  public campaigns;
     uint256 public numberofCampaigns =0;
+
+
+    address public owner;
+    IWETHGateway public immutable wethGateway;
+    address public immutable aavePool;
+
+    event FundsInvested(uint256 amount);
+    event FundsReclaimed(uint256 amount);
+
+    modifier onlyOwner(){
+        require(msg.sender == owner, "Only the contract owner can call this function.");
+        _;
+    }
+
+    constructor(address _wethGatewayAddress, address _aavePoolAddress){
+        owner = msg.sender;
+        wethGateway = IWETHGateway(_wethGatewayAddress);
+        aavePool = _aavePoolAddress;
+    }
+
 
     function createCampaign(address _owner, string memory _title, string memory _description, uint256 _target, uint256 _deadline, string memory _image) public returns (uint256){
     require(_deadline > block.timestamp, "The deadline should be date in the future.");
@@ -63,6 +91,29 @@ contract CrowdFunding is ReentrancyGuard{
 
         require(sent, "Failed to send funds");
     }
+
+
+
+    function invest() external payable onlyOwner{
+        uint256 amountToInvest = address(this).balance;
+        require(amountToInvest > 0, "No funds to invest.");
+
+        wethGateway.depositETH{value: amountToInvest}(aavePool, address(this), 0);
+
+        emit FundsInvested(amountToInvest);
+
+    }
+
+
+    function reclaim(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than zero.");
+
+        wethGateway.withdrawETH(aavePool, amount, address(this));
+
+        emit FundsReclaimed(amount);
+    }
+
+
 
     function refundDonors(uint256 _id) public nonReentrant{
         Campaign storage campaign = campaigns[_id];
