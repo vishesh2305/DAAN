@@ -11,11 +11,9 @@ const CampaignDetails = () => {
   const { state } = useLocation();
   const navigate = useNavigate();
   const { donate, getDonations, contract, address } = useStateContext();
-
   const [isLoading, setIsLoading] = useState(false);
   const [amount, setAmount] = useState('');
   const [donators, setDonators] = useState([]);
-
   const remainingDays = daysLeft(state.deadline);
 
   const fetchDonators = async () => {
