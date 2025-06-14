@@ -7,7 +7,6 @@ import Web3 from 'web3';
 import { CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS } from '../constants';
 
 const CreateCampaignPage = () => {
-  // --- State Management ---
   const [formData, setFormData] = useState({
     title: '',
     promptText: '',
@@ -18,11 +17,9 @@ const CreateCampaignPage = () => {
   });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
-  // --- Handlers ---
   const handleChange = (e) => {
     const { id, value } = e.target;
     setFormData(prev => ({ ...prev, [id]: value }));
@@ -40,19 +37,17 @@ const CreateCampaignPage = () => {
     }));
   };
 
-  // --- Validation and Submission Logic ---
   const validate = () => {
     const newErrors = {};
     if (!formData.title.trim()) newErrors.title = "Campaign title is required.";
     if (!formData.description.trim()) newErrors.description = "Campaign description is required.";
     if (!formData.fundingGoal) newErrors.fundingGoal = "Funding goal is required.";
     if (formData.mediaFiles.length === 0) newErrors.media = "At least one image or video is required.";
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
- const handleLaunchCampaign = async (event) => {
+  const handleLaunchCampaign = async (event) => {
     event.preventDefault();
     if (validate()) {
       setIsLoading(true);
@@ -64,36 +59,33 @@ const CreateCampaignPage = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ description: formData.description }),
         });
-
         const aiData = await aiResponse.json();
 
-        const isConfirmed = window.confirm(
-          `AI Analysis: This campaign is predicted as '${aiData.prediction}'. Do you want to proceed with launching it?`
-        );
-
-        if (!isConfirmed) {
+        // *** MODIFIED LOGIC: Stop if campaign is not genuine ***
+        if (aiData.prediction !== 'Genuine') {
+          alert(`Campaign Blocked: Our AI analysis has flagged this campaign for review (${aiData.prediction}). Please revise your description or contact support.`);
           setIsLoading(false);
-          return;
+          return; // Halt the execution
         }
+        
+        alert("AI check passed as Genuine. Proceeding to wallet for transaction confirmation.");
+
       } catch (aiError) {
         console.error("AI prediction failed:", aiError);
-        if (!window.confirm("Could not get an AI prediction. Do you still want to proceed?")) {
-          setIsLoading(false);
-          return;
-        }
+        alert("Could not get an AI prediction due to a connection error. Please ensure the AI server is running and try again.");
+        setIsLoading(false);
+        return;
       }
       // --- End of AI Prediction Step ---
 
-      // --- Blockchain Transaction Step ---
+      // --- Blockchain Transaction Step (only runs if AI check passes) ---
       try {
         if (window.ethereum) {
           await window.ethereum.request({ method: 'eth_requestAccounts' });
           const web3 = new Web3(window.ethereum);
           const accounts = await web3.eth.getAccounts();
           const userAddress = accounts[0];
-
           const contract = new web3.eth.Contract(CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS);
-
           const targetInWei = web3.utils.toWei(formData.fundingGoal, 'ether');
           const deadlineInSeconds = Math.floor(new Date().getTime() / 1000) + (30 * 24 * 60 * 60);
 
@@ -106,7 +98,7 @@ const CreateCampaignPage = () => {
             "YOUR_IMAGE_URL_OR_IPFS_HASH"
           ).send({ from: userAddress });
 
-          console.log("Campaign created successfully!");
+          alert("Campaign created successfully!");
           navigate('/dashboard');
         } else {
           alert('Please install MetaMask to create a campaign!');
@@ -119,11 +111,7 @@ const CreateCampaignPage = () => {
       }
     }
   };
-
-  const handleGenerateDescription = async () => {
-    console.log("Generating description...");
-  };
-
+  
   return (
     <main className="container mx-auto px-4 py-8 animate-fade-in">
       <div className="max-w-4xl mx-auto">
@@ -131,11 +119,8 @@ const CreateCampaignPage = () => {
           <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Start Your Campaign</h1>
           <p className="text-md text-gray-600 dark:text-gray-300 mt-2">Bring your idea to life with the support of the community.</p>
         </div>
-
         <Card className="p-6 sm:p-8">
           <form className="space-y-6" onSubmit={handleLaunchCampaign} noValidate>
-            {/* Form content remains the same... */}
-            {/* Step 1: Core Idea */}
             <div>
               <h3 className="font-bold text-lg mb-2 flex items-center">
                   <Lightbulb className="h-5 w-5 mr-2 text-yellow-500"/> 1. The Big Idea
@@ -168,10 +153,7 @@ const CreateCampaignPage = () => {
                   </div>
               </div>
             </div>
-            
             <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-            {/* Step 2: The Story */}
             <div>
                  <h3 className="font-bold text-lg mb-2 flex items-center">
                    <FileText className="h-5 w-5 mr-2 text-blue-500"/> 2. Your Story
@@ -190,7 +172,6 @@ const CreateCampaignPage = () => {
                    />
                    {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
                  </div>
-                 
                 <div className="mt-6">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Campaign Media
@@ -242,10 +223,7 @@ const CreateCampaignPage = () => {
                   )}
                 </div>
             </div>
-
             <div className="border-t border-gray-200 dark:border-gray-700"></div>
-            
-            {/* Step 3: Funding */}
             <div>
                  <h3 className="font-bold text-lg mb-2 flex items-center">
                    <DollarSign className="h-5 w-5 mr-2 text-green-500"/> 3. Funding
@@ -280,18 +258,16 @@ const CreateCampaignPage = () => {
                    </div>
                </div>
             </div>
-            
             <div className="flex justify-end pt-4">
                  <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={isLoading}>
                    {isLoading ? <LoaderCircle className="animate-spin" /> : 'Launch Campaign'}
                  </Button>
             </div>
-
           </form>
         </Card>
       </div>
     </main>
   );
-}; // <-- REMOVED THE EXTRA `};` FROM HERE
+};
 
 export default CreateCampaignPage;
