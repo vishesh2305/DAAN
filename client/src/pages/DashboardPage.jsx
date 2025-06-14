@@ -1,50 +1,60 @@
-import React, { useState } from 'react';
-import { Search, Grid3X3, List, Shield } from 'lucide-react';
-import { mockData } from '../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { Search, Grid3X3, List, Shield, LoaderCircle } from 'lucide-react';
+import Web3 from 'web3';
+import { CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS } from '../constants';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import ProgressBar from '../components/common/ProgressBar';
-// Import the new modal component
 import CampaignDetailModal from '../components/CampaignDetailModal';
 
 const DashboardPage = () => {
   const [viewMode, setViewMode] = useState('grid');
-  // State to manage the selected campaign for the modal
   const [selectedCampaign, setSelectedCampaign] = useState(null);
+  const [campaigns, setCampaigns] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const CampaignCard = ({ campaign, viewMode }) => (
-    <Card className={`overflow-hidden transition-shadow hover:shadow-xl ${viewMode === 'list' ? 'flex flex-col sm:flex-row' : ''}`}>
-        <div className={`relative ${viewMode === 'list' ? 'sm:w-1/3' : 'h-48'}`}>
-            <img src={campaign.image} alt={campaign.title} className="w-full h-full object-cover"/>
-            <div className="absolute top-2 right-2 flex flex-col space-y-2">
-                 {campaign.verified && (
-                    <div className="flex items-center bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs font-bold px-2 py-1 rounded-full">
-                       <Shield className="h-3 w-3 mr-1"/> Verified
-                    </div>
-                )}
-            </div>
-             <div className="absolute top-2 left-2 flex flex-col space-y-2">
-                <div className={`text-xs font-bold px-2 py-1 rounded-full text-white ₿{campaign.category === 'Health' ? 'bg-red-500' : campaign.category === 'Education' ? 'bg-blue-500' : campaign.category === 'Environment' ? 'bg-green-500' : 'bg-purple-500'}`}>
-                    {campaign.category}
-                </div>
-            </div>
-        </div>
-        <div className={`p-4 flex flex-col flex-grow ${viewMode === 'list' ? 'sm:w-2/3' : ''}`}>
-            <h3 className="font-bold text-lg mb-1">{campaign.title}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">by {campaign.organizer}</p>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">{campaign.description}</p>
-            <div>
-                <ProgressBar raised={campaign.raised} goal={campaign.goal} />
-                <div className="flex justify-between items-center text-sm mt-2">
-                    <p className="font-bold text-blue-600 dark:text-blue-400">₿{campaign.raised.toLocaleString()}</p>
-                    <p className="text-gray-500 dark:text-gray-400">of ₿{campaign.goal.toLocaleString()}</p>
-                </div>
-            </div>
-        </div>
-    </Card>
-  );
+  const getCampaigns = async () => {
+    try {
+      const web3 = new Web3(window.ethereum);
+      const contract = new web3.eth.Contract(CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS);
+      const fetchedCampaigns = await contract.methods.getCampaigns().call();
+      
+      const formattedCampaigns = fetchedCampaigns.map((campaign, index) => ({
+        id: index,
+        owner: campaign.owner,
+        title: campaign.title,
+        description: campaign.description,
+        target: web3.utils.fromWei(campaign.target.toString(), 'ether'),
+        // *** FIX: Keep the deadline as a raw timestamp (in milliseconds) ***
+        deadline: Number(campaign.deadline) * 1000, 
+        amountCollected: web3.utils.fromWei(campaign.amountCollected.toString(), 'ether'),
+        image: campaign.image || 'https://placehold.co/600x400/94a3b8/ffffff?text=Daan',
+        // --- Added placeholder data to match modal ---
+        organizer: 'Verified Organizer',
+        donators: Number(campaign.donators.length),
+        claimed: campaign.claimed,
+        verified: true,
+      }));
 
-  // Handlers to open and close the modal
+      setCampaigns(formattedCampaigns.reverse());
+    } catch (err) {
+      console.error("Error fetching campaigns:", err);
+      setError("Failed to fetch campaigns. Please make sure your wallet is connected.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if(window.ethereum) {
+      getCampaigns();
+    } else {
+      setError("Please install MetaMask to view campaigns.");
+      setIsLoading(false);
+    }
+  }, []);
+
   const handleCampaignClick = (campaign) => {
     setSelectedCampaign(campaign);
   };
@@ -53,54 +63,70 @@ const DashboardPage = () => {
     setSelectedCampaign(null);
   };
 
+  const CampaignCard = ({ campaign, viewMode }) => (
+    <Card className={`overflow-hidden transition-shadow hover:shadow-xl ${viewMode === 'list' ? 'flex flex-col sm:flex-row' : ''}`}>
+        <div className={`relative ${viewMode === 'list' ? 'sm:w-1/3' : 'h-48'}`}>
+            <img src={campaign.image} alt={campaign.title} className="w-full h-full object-cover"/>
+            <div className="absolute top-2 right-2">
+                 {campaign.verified && (
+                    <div className="flex items-center bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs font-bold px-2 py-1 rounded-full">
+                       <Shield className="h-3 w-3 mr-1"/> Verified
+                    </div>
+                )}
+            </div>
+             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent text-white">
+                <h3 className="font-bold text-lg">{campaign.title}</h3>
+            </div>
+        </div>
+        <div className={`p-4 flex flex-col flex-grow ${viewMode === 'list' ? 'sm:w-2/3' : ''}`}>
+             <p className="text-sm text-gray-600 dark:text-gray-400 flex-grow">{viewMode === 'grid' ? `${campaign.description.substring(0, 100)}...` : campaign.description}</p>
+             <div className="mt-4">
+                 <ProgressBar value={(campaign.amountCollected / campaign.target) * 100} />
+                <div className="flex justify-between items-center text-sm mt-2">
+                    <span className="font-bold text-blue-600 dark:text-blue-400">{campaign.amountCollected} ETH</span>
+                    <span className="text-gray-500 dark:text-gray-400">raised of {campaign.target} ETH</span>
+                </div>
+                 <div className="flex justify-between items-center text-xs mt-2 text-gray-500 dark:text-gray-400">
+                    <span>by {`${campaign.owner.substring(0, 6)}...${campaign.owner.substring(38)}`}</span>
+                    {/* *** FIX: Format the date here for display *** */}
+                    <span>Deadline: {new Date(campaign.deadline).toLocaleDateString()}</span>
+                 </div>
+             </div>
+        </div>
+    </Card>
+  );
+
   return (
     <>
-      <main className="container mx-auto px-4 py-8 animate-fade-in">
-          <div className="text-left mb-8">
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Active Campaigns</h1>
-              <p className="text-md text-gray-600 dark:text-gray-300 mt-1">Discover and support meaningful causes that matter to you</p>
-          </div>
-          
-          {/* <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/30 rounded-lg">
-              <p className="text-blue-800 dark:text-blue-200">
-                  Welcome back, <span className="font-semibold capitalize">{mockData.user.name}</span>! Ready to make a difference today?
-              </p>
-          </div> */}
-
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-               <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg w-full sm:w-auto">
-                  <div className="pl-3">
-                      <Search className="h-5 w-5 text-gray-500" />
-                  </div>
+      <main className="container mx-auto px-4 py-8">
+          {/* Search and view mode controls remain the same */}
+          <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex-grow max-w-md">
+                  <div className="pl-4"> <Search className="h-5 w-5 text-gray-500" /> </div>
                   <input type="text" placeholder="Search campaigns..." className="bg-transparent p-2 focus:outline-none w-full"/>
               </div>
               <div className="flex items-center space-x-2">
-                  <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
-                      <Grid3X3 className="h-5 w-5"/>
-                  </Button>
-                  <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
-                      <List className="h-5 w-5"/>
-                  </Button>
+                  <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}> <Grid3X3 className="h-5 w-5"/> </Button>
+                  <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('list')}> <List className="h-5 w-5"/> </Button>
               </div>
           </div>
-
-          <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-              {mockData.campaigns.map(campaign => (
-                  // Wrap the card in a clickable div
-                  <div key={campaign.id} onClick={() => handleCampaignClick(campaign)} className="cursor-pointer">
-                    <CampaignCard campaign={campaign} viewMode={viewMode} />
-                  </div>
-              ))}
-          </div>
+          
+          {isLoading ? (
+            <div className="flex justify-center items-center h-64"> <LoaderCircle className="h-12 w-12 animate-spin text-blue-600" /> </div>
+          ) : error ? (
+            <div className="text-center text-red-500 bg-red-100 dark:bg-red-900/50 p-4 rounded-lg"> <p>{error}</p> </div>
+          ) : (
+            <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+                {campaigns.map(campaign => (
+                    <div key={campaign.id} onClick={() => handleCampaignClick(campaign)} className="cursor-pointer">
+                      <CampaignCard campaign={campaign} viewMode={viewMode} />
+                    </div>
+                ))}
+            </div>
+          )}
       </main>
 
-      {/* Conditionally render the modal */}
-      {selectedCampaign && (
-        <CampaignDetailModal 
-          campaign={selectedCampaign}
-          onClose={handleCloseModal} 
-        />
-      )}
+      {selectedCampaign && ( <CampaignDetailModal campaign={selectedCampaign} onClose={handleCloseModal} /> )}
     </>
   );
 };

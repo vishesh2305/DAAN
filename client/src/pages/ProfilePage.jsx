@@ -1,278 +1,137 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, TrendingUp, Eye, EyeOff, Heart, Plus, ExternalLink, Shield } from 'lucide-react';
-import { mockData } from '../data/mockData';
+import { LoaderCircle } from 'lucide-react';
+import Web3 from 'web3';
+import { CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS } from '../constants';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
+import { useUser } from '../contexts/UserProvider';
 
 const ProfilePage = () => {
+    const { currentUser } = useUser();
     const [activeTab, setActiveTab] = useState('overview');
-    const [showPassword, setShowPassword] = useState(false);
-    const [showAmounts, setShowAmounts] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [userAccount, setUserAccount] = useState(null);
+    const [createdCampaigns, setCreatedCampaigns] = useState([]);
+    const [donatedCampaigns, setDonatedCampaigns] = useState([]);
 
-    const tabClasses = (tabName) => 
-        `py-2 px-4 font-semibold border-b-2 transition-colors duration-200 ${
-            activeTab === tabName 
-            ? 'border-blue-600 text-blue-600 dark:text-blue-300' 
-            : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
-        }`;
-    
-    const ToggleSwitch = ({ label, isEnabled, onToggle }) => (
-        <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
-            <div className="relative">
-                <input type="checkbox" className="sr-only" checked={isEnabled} onChange={onToggle} />
-                <div className={`block w-12 h-6 rounded-full transition-colors ${isEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
-                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isEnabled ? 'transform translate-x-6' : ''}`}></div>
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!window.ethereum) {
+                setError("Please install MetaMask to view your profile.");
+                setIsLoading(false);
+                return;
+            }
+
+            try {
+                setIsLoading(true);
+                const web3 = new Web3(window.ethereum);
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                const currentUserAddress = accounts[0];
+                setUserAccount(currentUserAddress);
+
+                const contract = new web3.eth.Contract(CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS);
+                const allCampaigns = await contract.methods.getCampaigns().call();
+
+                const created = [];
+                const donated = [];
+
+                for (let i = 0; i < allCampaigns.length; i++) {
+                    const campaign = allCampaigns[i];
+                    const formattedCampaign = {
+                        id: i,
+                        owner: campaign.owner,
+                        title: campaign.title,
+                        target: web3.utils.fromWei(campaign.target.toString(), 'ether'),
+                        amountCollected: web3.utils.fromWei(campaign.amountCollected.toString(), 'ether'),
+                        image: campaign.image || 'https://placehold.co/600x400/94a3b8/ffffff?text=Daan',
+                    };
+
+                    if (formattedCampaign.owner.toLowerCase() === currentUserAddress.toLowerCase()) {
+                        created.push(formattedCampaign);
+                    }
+
+                    const donatorsData = await contract.methods.getDonators(i).call();
+                    if (donatorsData[0].map(d => d.toLowerCase()).includes(currentUserAddress.toLowerCase())) {
+                        donated.push(formattedCampaign);
+                    }
+                }
+                setCreatedCampaigns(created);
+                setDonatedCampaigns(donated);
+            } catch (err) {
+                console.error("Failed to fetch profile data:", err);
+                setError("Could not load profile data.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    const tabClasses = (tabName) => `py-2 px-4 font-semibold border-b-2 transition-colors ${activeTab === tabName ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`;
+
+    const renderContent = () => {
+        if (isLoading) {
+            return <div className="flex justify-center p-8"><LoaderCircle className="animate-spin h-8 w-8 text-blue-500" /></div>;
+        }
+        if (error) {
+            return <div className="text-center text-red-500 p-4">{error}</div>;
+        }
+        switch (activeTab) {
+            case 'created':
+                return <CampaignList campaigns={createdCampaigns} emptyMessage="You have not created any campaigns yet." />;
+            case 'donated':
+                return <CampaignList campaigns={donatedCampaigns} emptyMessage="You have not donated to any campaigns yet." />;
+            default:
+                return <p className="text-gray-600 dark:text-gray-400">Welcome! This is your overview. Select a tab to see more details.</p>;
+        }
+    };
+
+    const CampaignList = ({ campaigns, emptyMessage }) => {
+        if (campaigns.length === 0) {
+            return <p className="text-center text-gray-500 py-8">{emptyMessage}</p>;
+        }
+        return (
+            <div className="space-y-4">
+                {campaigns.map(campaign => (
+                    <Card key={campaign.id} className="flex items-center justify-between p-4">
+                        <div className="flex items-center gap-4">
+                            <img src={campaign.image} alt={campaign.title} className="w-16 h-16 rounded-lg object-cover" />
+                            <div>
+                                <h4 className="font-bold">{campaign.title}</h4>
+                                <p className="text-sm text-gray-500">{campaign.amountCollected} ETH of {campaign.target} ETH</p>
+                            </div>
+                        </div>
+                        <Button as={Link} to={`/dashboard`} variant="outline" size="sm">View</Button>
+                    </Card>
+                ))}
             </div>
-        </label>
-    );
+        );
+    };
 
     return (
-        <main className="container mx-auto px-4 py-8 animate-fade-in">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold">My Profile</h1>
-                <p className="text-gray-500 dark:text-gray-400">Manage your account settings and view your campaign activity.</p>
+        <main className="container mx-auto px-4 py-8">
+            <Card className="p-6 mb-8">
+                <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <img src={currentUser.avatar} alt="Profile" className="w-24 h-24 rounded-full border-4 border-blue-500 object-cover" />
+                    <div>
+                        <h2 className="text-2xl font-bold">{currentUser.name}'s Profile</h2>
+                        <p className="text-gray-500 dark:text-gray-400 break-all">{userAccount || 'Loading wallet address...'}</p>
+                    </div>
+                </div>
+            </Card>
+            <div>
+                <div className="border-b border-gray-200 dark:border-gray-700">
+                    <nav className="-mb-px flex space-x-6">
+                        <button className={tabClasses('overview')} onClick={() => setActiveTab('overview')}>Overview</button>
+                        <button className={tabClasses('created')} onClick={() => setActiveTab('created')}>Created ({createdCampaigns.length})</button>
+                        <button className={tabClasses('donated')} onClick={() => setActiveTab('donated')}>Donated ({donatedCampaigns.length})</button>
+                    </nav>
+                </div>
+                <div className="py-6">{renderContent()}</div>
             </div>
-
-            <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-                <nav className="-mb-px flex space-x-2 sm:space-x-6 overflow-x-auto">
-                    <button onClick={() => setActiveTab('overview')} className={tabClasses('overview')}>Overview</button>
-                    <button onClick={() => setActiveTab('donations')} className={tabClasses('donations')}>Donations</button>
-                    <button onClick={() => setActiveTab('campaigns')} className={tabClasses('campaigns')}>My Campaigns</button>
-                    <button onClick={() => setActiveTab('settings')} className={tabClasses('settings')}>Settings</button>
-                </nav>
-            </div>
-            
-            {activeTab === 'overview' && (
-                // --- Overview Tab ---
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2">
-                        <Card className="p-6">
-                            <h3 className="font-bold text-lg mb-4 flex items-center">
-                               <Users className="h-5 w-5 mr-2 text-gray-500"/> Profile Information
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Your personal information and account details.</p>
-                            <div className="flex items-center mb-8">
-                                <img src={mockData.user.profileImage} alt="profile" className="h-20 w-20 rounded-full mr-6"/>
-                                <div>
-                                    <p className="font-bold text-xl capitalize">{mockData.user.name}</p>
-                                    <p className="text-gray-500">Individual</p>
-                                </div>
-                            </div>
-                            <form className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
-                                    <input type="text" defaultValue={mockData.user.name} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 capitalize" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
-                                    <input type="email" defaultValue={mockData.user.email} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
-                                    <input type="tel" defaultValue={mockData.user.phone} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                                </div>
-                                {/* <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
-                                     <div className="relative">
-                                        <input type={showPassword ? "text" : "password"} defaultValue="fakepassword" className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 pr-10" />
-                                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500">
-                                            {showPassword ? <EyeOff className="h-5 w-5"/> : <Eye className="h-5 w-5"/>}
-                                        </button>
-                                    </div>
-                                </div> */}
-                            </form>
-                        </Card>
-                    </div>
-                     <div className="space-y-6">
-                         <Card className="p-6">
-                            <h3 className="font-bold text-lg mb-4 flex items-center">
-                               <TrendingUp className="h-5 w-5 mr-2 text-gray-500"/> Activity Stats
-                            </h3>
-                            <div className="space-y-4">
-                               <div className="flex justify-between items-center">
-                                 <p className="text-gray-500 dark:text-gray-400">Total Donated</p>
-                                 <p className="font-bold text-green-600 text-2xl">₿{mockData.user.totalDonated}</p>
-                               </div>
-                               <div className="flex justify-between items-center text-sm">
-                                 <p className="text-gray-500 dark:text-gray-400 flex items-center"><Heart className="h-4 w-4 mr-2 text-red-500"/> Campaigns Supported</p>
-                                 <p className="font-semibold">{mockData.user.campaignsSupported}</p>
-                               </div>
-                               <div className="flex justify-between items-center text-sm">
-                                 <p className="text-gray-500 dark:text-gray-400 flex items-center"><Plus className="h-4 w-4 mr-2 text-blue-500"/> Campaigns Created</p>
-                                 <p className="font-semibold">{mockData.user.campaignsCreated}</p>
-                               </div>
-                                <div className="flex justify-between items-center text-sm">
-                                 <p className="text-gray-500 dark:text-gray-400 flex items-center"><Users className="h-4 w-4 mr-2 text-purple-500"/> Participated</p>
-                                 <p className="font-semibold">{mockData.user.participated}</p>
-                               </div>
-                            </div>
-                         </Card>
-                         <Button as={Link} to="/create-campaign" size="lg" className="w-full">
-                           <Plus className="mr-2 h-5 w-5"/> Create Campaign
-                         </Button>
-                    </div>
-                </div>
-            )}
-            
-            {/* --- Donations Tab with Fix --- */}
-            {activeTab === 'donations' && (
-                <div>
-                    <div className="flex justify-between items-center mb-6">
-                        <div>
-                            <h2 className="text-2xl font-bold">Donation History</h2>
-                            <p className="text-gray-500 dark:text-gray-400">Your complete donation history and impact tracking</p>
-                        </div>
-                        <ToggleSwitch label="Show amounts" isEnabled={showAmounts} onToggle={() => setShowAmounts(!showAmounts)} />
-                    </div>
-                    <div className="space-y-4">
-                        {/* Safely check if mockData.donations exists and has items */}
-                        {mockData.donations && mockData.donations.length > 0 ? (
-                            mockData.donations.map(donation => (
-                                <Card key={donation.id} className="p-4 flex justify-between items-center">
-                                    <div>
-                                        <p className="font-bold text-lg">{donation.title}</p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">by {donation.by} &bull; {donation.date}</p>
-                                    </div>
-                                    <div className="flex items-center space-x-4">
-                                        <button className="text-gray-400 hover:text-blue-600"><ExternalLink className="h-5 w-5"/></button>
-                                        <span className="text-xs font-semibold uppercase bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                                            {donation.status}
-                                        </span>
-                                    </div>
-                                </Card>
-                            ))
-                        ) : (
-                            // Show a message if there are no donations
-                            <Card className="p-8 text-center">
-                                <p className="text-gray-500 dark:text-gray-400">No donation history found.</p>
-                            </Card>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* --- My Campaigns Tab with Fix --- */}
-            {activeTab === 'campaigns' && (
-                <div>
-                     <div className="flex justify-between items-center mb-6">
-                        <div>
-                            <h2 className="text-2xl font-bold">My Campaigns</h2>
-                            <p className="text-gray-500 dark:text-gray-400">Manage and track your created campaigns</p>
-                        </div>
-                        <Button as={Link} to="/create-campaign">
-                            <Plus className="mr-2 h-5 w-5"/> Create New Campaign
-                        </Button>
-                    </div>
-                    {/* Safely check if mockData.campaigns exists and has items */}
-                    {mockData.campaigns && mockData.campaigns.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {mockData.campaigns.map(campaign => (
-                                 <Card key={campaign.id} className="p-6">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <h3 className="font-bold text-xl">{campaign.title}</h3>
-                                         <span className={`text-xs font-semibold uppercase px-3 py-1 rounded-full ${campaign.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                                            {campaign.status}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-gray-500 dark:text-gray-400">Progress</span>
-                                            <span className="font-semibold">{campaign.progress}%</span>
-                                        </div>
-                                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                                            <div className="bg-blue-600 h-2.5 rounded-full" style={{width: `{campaign.progress}%`}}></div>
-                                        </div>
-                                        <div className="flex justify-between text-sm mt-2">
-                                            <p><span className="font-bold">₿{campaign.raised.toLocaleString()}</span> raised</p>
-                                            <p>{campaign.backers} funds</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 mt-6">
-                                        <Button variant="outline" className="w-full">View Campaign</Button>
-                                    </div>
-                                </Card>
-                            ))}
-                        </div>
-                    ) : (
-                         // Show a message if there are no campaigns
-                        <Card className="p-8 text-center">
-                            <p className="text-gray-500 dark:text-gray-400">You have not created any campaigns yet.</p>
-                        </Card>
-                    )}
-                </div>
-            )}
-
-            {/* --- Settings Tab --- */}
-            {activeTab === 'settings' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <Card className="p-6">
-                        <h3 className="font-bold text-lg mb-1 flex items-center">
-                           <Users className="h-5 w-5 mr-2 text-gray-500"/> Personal Information
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Update your account details and contact information</p>
-                        <form className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name</label>
-                                    <input type="text" defaultValue="Sarah" className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                                </div>
-                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name</label>
-                                    <input type="text" defaultValue="Johnson" className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                                <input type="email" defaultValue={mockData.user.email} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
-                                <input type="tel" defaultValue={mockData.user.phone} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                            </div>
-                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Location</label>
-                                <input type="text" defaultValue="San Francisco, CA" className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                            </div>
-                            <div className="pt-2">
-                                <Button type="submit" className="w-full sm:w-auto">Update Information</Button>
-                            </div>
-                        </form>
-                    </Card>
-                     <Card className="p-6">
-                        <h3 className="font-bold text-lg mb-1 flex items-center">
-                           <Shield className="h-5 w-5 mr-2 text-gray-500"/> Privacy & Security
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Manage your privacy settings and account security</p>
-                        <div className="space-y-6">
-                            <ToggleSwitch label="Public Profile" isEnabled={true} />
-                            {/* <ToggleSwitch label="Show Donation History" isEnabled={false} /> */}
-                             <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                             <div>
-                                <h4 className="font-semibold text-md mb-4">Change Password</h4>
-                                <form className="space-y-4">
-                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Password</label>
-                                        <input type="password" className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
-                                        <input type="password" className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                                    </div>
-                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm New Password</label>
-                                        <input type="password" className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" />
-                                    </div>
-                                    <div className="pt-2">
-                                        <Button type="submit" variant="outline" className="w-full sm:w-auto">Update Password</Button>
-                                    </div>
-                                </form>
-                             </div>
-                        </div>
-                    </Card>
-                </div>
-            )}
         </main>
     );
 };

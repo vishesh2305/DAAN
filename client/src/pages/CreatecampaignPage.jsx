@@ -1,11 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
 import { Sparkles, LoaderCircle, Lightbulb, DollarSign, Tag, FileText, ImagePlus, X } from 'lucide-react';
 import Button from '../components/common/Button.jsx';
 import Card from '../components/common/Card.jsx';
+import Web3 from 'web3';
+import { CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS } from '../constants';
 
 const CreateCampaignPage = () => {
-  // --- Start of State Management Section ---
+  // --- State Management ---
   const [formData, setFormData] = useState({
     title: '',
     promptText: '',
@@ -16,17 +18,16 @@ const CreateCampaignPage = () => {
   });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-  
-  const navigate = useNavigate(); // Initialize navigate for redirection
-  const fileInputRef = useRef(null);
-  // --- End of State Management Section ---
 
-  // --- Start of Handlers Section ---
+  const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+
+  // --- Handlers ---
   const handleChange = (e) => {
     const { id, value } = e.target;
     setFormData(prev => ({ ...prev, [id]: value }));
   };
-  
+
   const handleFileChange = (event) => {
     const files = Array.from(event.target.files);
     setFormData(prev => ({ ...prev, mediaFiles: [...prev.mediaFiles, ...files] }));
@@ -38,7 +39,6 @@ const CreateCampaignPage = () => {
       mediaFiles: prev.mediaFiles.filter((_, i) => i !== index)
     }));
   };
-  // --- End of Handlers Section ---
 
   // --- Validation and Submission Logic ---
   const validate = () => {
@@ -47,25 +47,82 @@ const CreateCampaignPage = () => {
     if (!formData.description.trim()) newErrors.description = "Campaign description is required.";
     if (!formData.fundingGoal) newErrors.fundingGoal = "Funding goal is required.";
     if (formData.mediaFiles.length === 0) newErrors.media = "At least one image or video is required.";
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleLaunchCampaign = (event) => {
+ const handleLaunchCampaign = async (event) => {
     event.preventDefault();
     if (validate()) {
-      console.log("Form is valid. Submitting and redirecting...");
-      // In a real app, you would submit formData to your backend here.
-      navigate('/dashboard');
-    } else {
-      console.log("Form is invalid. Please check the errors.");
+      setIsLoading(true);
+
+      // --- AI Prediction Step ---
+      try {
+        const aiResponse = await fetch('http://127.0.0.1:5000/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: formData.description }),
+        });
+
+        const aiData = await aiResponse.json();
+
+        const isConfirmed = window.confirm(
+          `AI Analysis: This campaign is predicted as '${aiData.prediction}'. Do you want to proceed with launching it?`
+        );
+
+        if (!isConfirmed) {
+          setIsLoading(false);
+          return;
+        }
+      } catch (aiError) {
+        console.error("AI prediction failed:", aiError);
+        if (!window.confirm("Could not get an AI prediction. Do you still want to proceed?")) {
+          setIsLoading(false);
+          return;
+        }
+      }
+      // --- End of AI Prediction Step ---
+
+      // --- Blockchain Transaction Step ---
+      try {
+        if (window.ethereum) {
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          const web3 = new Web3(window.ethereum);
+          const accounts = await web3.eth.getAccounts();
+          const userAddress = accounts[0];
+
+          const contract = new web3.eth.Contract(CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS);
+
+          const targetInWei = web3.utils.toWei(formData.fundingGoal, 'ether');
+          const deadlineInSeconds = Math.floor(new Date().getTime() / 1000) + (30 * 24 * 60 * 60);
+
+          await contract.methods.createCampaign(
+            userAddress,
+            formData.title,
+            formData.description,
+            targetInWei,
+            deadlineInSeconds,
+            "YOUR_IMAGE_URL_OR_IPFS_HASH"
+          ).send({ from: userAddress });
+
+          console.log("Campaign created successfully!");
+          navigate('/dashboard');
+        } else {
+          alert('Please install MetaMask to create a campaign!');
+        }
+      } catch (error) {
+        console.error("Error creating campaign:", error);
+        alert(`Failed to create campaign. Error: ${error.message}`);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
-  // --- End of Validation and Submission Logic ---
 
-  // AI Generation function (no changes)
-  const handleGenerateDescription = async () => { /* ... existing code ... */ };
+  const handleGenerateDescription = async () => {
+    console.log("Generating description...");
+  };
 
   return (
     <main className="container mx-auto px-4 py-8 animate-fade-in">
@@ -76,8 +133,8 @@ const CreateCampaignPage = () => {
         </div>
 
         <Card className="p-6 sm:p-8">
-          {/* Add onSubmit handler to the form */}
           <form className="space-y-6" onSubmit={handleLaunchCampaign} noValidate>
+            {/* Form content remains the same... */}
             {/* Step 1: Core Idea */}
             <div>
               <h3 className="font-bold text-lg mb-2 flex items-center">
@@ -225,8 +282,8 @@ const CreateCampaignPage = () => {
             </div>
             
             <div className="flex justify-end pt-4">
-                 <Button type="submit" size="lg" className="w-full sm:w-auto">
-                   Launch Campaign
+                 <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={isLoading}>
+                   {isLoading ? <LoaderCircle className="animate-spin" /> : 'Launch Campaign'}
                  </Button>
             </div>
 
@@ -235,6 +292,6 @@ const CreateCampaignPage = () => {
       </div>
     </main>
   );
-};
+}; // <-- REMOVED THE EXTRA `};` FROM HERE
 
 export default CreateCampaignPage;
