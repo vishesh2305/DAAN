@@ -1,0 +1,50 @@
+/* Import Bootstrap if you're not already doing it globally in your React app */
+/* @import url('https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css'); */
+/* @import url('https://fonts.googleapis.com/css?family=Arvo'); */
+
+/* If you have a global index.css or similar, you might want to put these imports there.
+   Otherwise, if this component is the only one needing them, keep them here.
+   However, for a real React app, you'd typically install Bootstrap via npm and import it in your main App.js or index.js.
+*/
+
+
+.page_404 {
+  padding: 40px 0;
+  background: #fff;
+  font-family: 'Arvo', serif;
+}
+
+.page_404 img {
+  width: 100%;
+}
+
+.four_zero_four_bg {
+  background-image: url(https://cdn.dribbble.com/users/285475/screenshots/2083086/dribbble_1.gif);
+  height: 400px;
+  background-position: center;
+}
+
+.four_zero_four_bg h1 {
+  font-size: 80px;
+}
+
+.four_zero_four_bg h3 {
+  font-size: 80px;
+}
+
+.link_404 {
+  color: #fff !important;
+  padding: 10px 20px;
+  background: #39ac31;
+  margin: 20px 0;
+  display: inline-block;
+}
+
+.contant_box_404 {
+  margin-top: -50px;
+}
+
+/* Optional: If you want to include the Bootstrap grid system, 
+   ensure you have Bootstrap installed or imported globally. 
+   These classes (col-sm-12, col-sm-10, col-sm-offset-1) rely on Bootstrap.
+*/

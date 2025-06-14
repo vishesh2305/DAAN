@@ -1,28 +1,34 @@
 import React from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
+import IndexPage from './pages/IndexPage';
+import DashboardPage from './pages/DashboardPage';
+import ProfilePage from './pages/ProfilePage';
+import AuthPage from './pages/AuthPage';
+import CreateCampaignPage from './pages/CreatecampaignPage';
+import NotFoundPage from './pages/NotFoundPage';
+import Header from './components/layout/Header';
+import Footer from './components/layout/Footer';
+ 
+function App() {
+  const location = useLocation();
+  // Determine which pages should have the main layout
+  const noLayoutRoutes = ['/auth'];
+  const showLayout = !noLayoutRoutes.includes(location.pathname);
 
-import { Sidebar, Navbar } from './components';
-import { CampaignDetails, CreateCampaign, Home, Profile } from './pages';
-
-const App = () => {
   return (
-    <div className="relative sm:-8 p-4 bg-[#13131a] min-h-screen flex flex-row">
-      <div className="sm:flex hidden mr-10 relative">
-        <Sidebar />
-      </div>
-
-      <div className="flex-1 max-sm:w-full max-w-[1280px] mx-auto sm:pr-5">
-        <Navbar />
-
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/create-campaign" element={<CreateCampaign />} />
-          <Route path="/campaign-details/:id" element={<CampaignDetails />} />
-        </Routes>
-      </div>
+    <div className="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 min-h-screen font-sans">
+      {showLayout && <Header />}
+      <Routes>
+        <Route path="/" element={<IndexPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/auth" element={<AuthPage />} />
+        <Route path="/create" element={<CreateCampaignPage />} /> {/* Add route for new page */}
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+      {showLayout && <Footer />}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
