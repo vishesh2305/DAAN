@@ -1,182 +1,218 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Users, Mail, Lock, Heart, Upload, Camera, ShieldCheck, AlertTriangle, LoaderCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ShieldCheck, LoaderCircle, Lock, Heart, User, Calendar, Home, Mail, Camera } from 'lucide-react';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
-import { useUser } from '../contexts/UserProvider'; // Assuming you have this for login state management
+import { useUser } from '../contexts/UserProvider';
 
 const AuthPage = () => {
     const [isSignUp, setIsSignUp] = useState(true);
     const navigate = useNavigate();
-    const { login } = useUser(); // Let's use a login function from context
+    const location = useLocation();
+    const { login } = useUser();
 
-    // State for the form
-    const [formData, setFormData] = useState({ fullName: '', email: '', password: '' });
-    const [errors, setErrors] = useState({});
-
-    // State for Face Verification
+    // Form state now includes all fields from the Aadhar card
+    const [formData, setFormData] = useState({
+        fullName: '',
+        dob: '',
+        address: '',
+        email: '',
+        password: ''
+    });
+    
     const [docImage, setDocImage] = useState(null);
     const [isVerified, setIsVerified] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
-    const [verificationMessage, setVerificationMessage] = useState('Please upload an ID and start verification.');
+    const [showWebcam, setShowWebcam] = useState(false);
+    const [verificationMessage, setVerificationMessage] = useState('Please upload an Aadhar Card to begin.');
+    
     const videoRef = useRef(null);
+    const canvasRef = useRef(null);
     const streamRef = useRef(null);
 
-    // Function to start the webcam
-    const startWebcam = useCallback(async () => {
-        try {
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                streamRef.current = stream;
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                }
-            }
-        } catch (err) {
-            console.error("Error accessing webcam:", err);
-            setVerificationMessage("Webcam access denied. Please allow camera access to proceed.");
+    // Set initial form mode based on navigation state from the Header
+    useEffect(() => {
+        if (location.state?.isSignUp !== undefined) {
+            setIsSignUp(location.state.isSignUp);
         }
-    }, []);
+    }, [location.state]);
 
-    // Function to stop the webcam
+    // Cleanup webcam stream when component unmounts or webcam is hidden
     const stopWebcam = useCallback(() => {
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => track.stop());
             streamRef.current = null;
         }
     }, []);
-    
-    // Cleanup webcam on component unmount
-    React.useEffect(() => {
-        return () => stopWebcam();
-    }, [stopWebcam]);
 
+    // Effect to start the webcam *after* the <video> element is rendered
+    useEffect(() => {
+        const startWebcam = async () => {
+            if (showWebcam && navigator.mediaDevices?.getUserMedia) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    streamRef.current = stream;
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                    }
+                } catch (err) {
+                    console.error("Error accessing webcam:", err);
+                    setVerificationMessage("Webcam access denied. Please allow camera access in your browser settings.");
+                    setShowWebcam(false);
+                }
+            }
+        };
+        startWebcam();
+        return () => stopWebcam();
+    }, [showWebcam, stopWebcam]);
+
+    // Handle document upload and trigger the webcam
     const handleDocImageChange = (event) => {
         const file = event.target.files?.[0];
         if (file) {
             setDocImage(file);
-            // Start webcam as soon as a document is selected
-            startWebcam();
+            setShowWebcam(true);
+            setVerificationMessage('Document selected. Position your face and click Verify.');
         }
     };
+    
+    // Handle changes to user-editable fields like email and password
+    const handleFormInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({...prev, [name]: value}));
+    };
 
-    // This function captures a frame from the video, sends it with the doc to the backend
+    // Main verification function
     const handleVerification = async () => {
-        if (!docImage) {
-            alert("Please upload your document first.");
+        if (!docImage || !videoRef.current?.srcObject?.active || videoRef.current.videoWidth === 0) {
+            alert("Please upload a document and ensure the camera is ready.");
             return;
         }
-        if (!videoRef.current || !videoRef.current.srcObject) {
-            alert("Webcam is not active. Please allow camera access.");
-            return;
-        }
-
         setIsVerifying(true);
-        setVerificationMessage("Verifying... Please follow any on-screen instructions.");
+        setVerificationMessage("Analyzing ID and face... Please hold still.");
 
-        const canvas = document.createElement('canvas');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        const context = canvas.getContext('2d');
-        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const canvas = canvasRef.current;
+        const video = videoRef.current;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
         canvas.toBlob(async (blob) => {
-            const formData = new FormData();
-            formData.append('document', docImage);
-            formData.append('live_face', blob, 'live_face.jpg');
+            if (!blob) {
+                setIsVerifying(false);
+                setVerificationMessage("Failed to capture face from camera. Please try again.");
+                return;
+            }
+            const apiFormData = new FormData();
+            apiFormData.append('document', docImage);
+            apiFormData.append('live_face', blob, 'live_face.jpg');
 
             try {
                 const response = await fetch('http://127.0.0.1:5000/upload', {
                     method: 'POST',
-                    body: formData,
+                    body: apiFormData,
                 });
-
                 const data = await response.json();
                 setVerificationMessage(data.message);
 
-                if (data.message.includes("Verified!")) {
+                // Check for a successful response and valid extracted data
+                if (response.ok && data.verification_status === "Verified") {
                     setIsVerified(true);
-                    stopWebcam(); // Turn off webcam on success
-                } else {
-                    // Allow user to try again
+                    setShowWebcam(false);
+                    // *** AUTO-FILL THE FORM ***
+                    setFormData(prev => ({
+                        ...prev,
+                        fullName: data.extracted_data.name || 'Could not read name',
+                        dob: data.extracted_data.dob || 'Could not read DOB',
+                        address: data.extracted_data.address || 'Could not read address',
+                    }));
                 }
             } catch (error) {
-                console.error("Verification API error:", error);
-                setVerificationMessage("Verification service is offline. Please try again later.");
+                console.error("Verification API Error:", error);
+                setVerificationMessage("Verification service is offline. Please ensure the Python server is running.");
             } finally {
                 setIsVerifying(false);
             }
         }, 'image/jpeg');
     };
     
+    // Handle final form submission
     const handleAuthSubmit = (e) => {
         e.preventDefault();
-        // In a real app, you would handle actual sign up/in here
-        console.log("Form submitted", formData);
-        login(); // Update global auth state
+        console.log("Registering user with verified data:", formData);
+        // Here you would send the `formData` to your main backend to create a user account.
+        // After successful registration, update the global state.
+        login(formData); // Pass user data to the global context
         navigate('/dashboard');
     };
 
     return (
         <main className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
-            <Card className="w-full max-w-md">
+            <Card className="w-full max-w-lg">
                 <div className="text-center mb-6">
                     <Heart className="mx-auto h-12 w-12 text-blue-600" />
-                    <h2 className="mt-4 text-2xl font-bold text-gray-900 dark:text-white">
-                        {isSignUp ? 'Create Your Account' : 'Sign In'}
-                    </h2>
+                    <h2 className="mt-4 text-2xl font-bold">{isSignUp ? 'Create Your Secure Account' : 'Sign In'}</h2>
                 </div>
 
-                {/* --- FACE VERIFICATION SECTION --- */}
-                {!isVerified && (
-                    <div className="mb-6 p-4 border rounded-lg dark:border-gray-700">
-                        <h3 className="font-semibold flex items-center mb-2">
-                            <ShieldCheck className="h-5 w-5 mr-2 text-blue-500" />
-                            Step 1: Identity Verification
-                        </h3>
+                {/* Verification section only shows for Sign Up */}
+                {!isVerified && isSignUp && (
+                     <div className="mb-6 p-4 border rounded-lg dark:border-gray-700">
+                        <h3 className="font-semibold flex items-center mb-2"><ShieldCheck className="h-5 w-5 mr-2 text-blue-500" />Step 1: Identity & Face Verification</h3>
                         <div className="space-y-4">
                              <div>
-                                <label htmlFor="doc-upload" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Upload ID Document</label>
-                                <input id="doc-upload" type="file" accept="image/*" onChange={handleDocImageChange} className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                                <label htmlFor="doc-upload" className="block text-sm font-medium">Upload Aadhaar Card Image</label>
+                                <input id="doc-upload" type="file" accept="image/*" onChange={handleDocImageChange} className="mt-1 block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                             </div>
-                            
-                            {videoRef.current?.srcObject && (
-                                <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-md" />
+                            {showWebcam && (
+                                <>
+                                    <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-md border bg-gray-200" />
+                                    <canvas ref={canvasRef} className="hidden"></canvas>
+                                </>
                             )}
-
                             <Button onClick={handleVerification} disabled={!docImage || isVerifying} className="w-full">
-                                {isVerifying ? <LoaderCircle className="animate-spin" /> : "Start Verification"}
+                                {isVerifying ? <LoaderCircle className="animate-spin" /> : <><Camera className="mr-2 h-4 w-4"/>Verify Identity</>}
                             </Button>
-                            
-                            <p className="text-sm text-center text-gray-500 dark:text-gray-300 min-h-[20px]">
-                                {verificationMessage}
-                            </p>
+                            <p className="text-sm text-center min-h-[20px]">{verificationMessage}</p>
                         </div>
                     </div>
                 )}
                 
-                {/* --- SIGNUP/LOGIN FORM --- */}
-                <div className={`${!isVerified ? 'opacity-30 pointer-events-none' : ''}`}>
-                     <h3 className="font-semibold flex items-center mb-2">
-                        <Lock className="h-5 w-5 mr-2 text-blue-500" />
-                        Step 2: Account Details
-                    </h3>
-                    <form onSubmit={handleAuthSubmit} className="space-y-4">
+                {isVerified && isSignUp && (
+                     <div className="p-4 text-center bg-green-100 dark:bg-green-900/50 rounded-lg mb-4">
+                        <ShieldCheck className="h-8 w-8 mx-auto text-green-600" />
+                        <p className="font-semibold mt-2 text-green-800 dark:text-green-200">Verification Successful!</p>
+                        <p className="text-sm text-green-700 dark:text-green-300">Please confirm your details and set a password.</p>
+                    </div>
+                )}
+                
+                <div className={`${isSignUp && !isVerified ? 'opacity-30 pointer-events-none' : ''}`}>
+                    <h3 className="font-semibold flex items-center mb-2"><Lock className="h-5 w-5 mr-2 text-blue-500" />{isSignUp ? 'Step 2: Confirm & Secure Your Account' : 'Login to your account'}</h3>
+                    <form onSubmit={handleAuthSubmit} className="space-y-4 mt-4">
                         {isSignUp && (
-                            <div>
-                                <label htmlFor="fullName" className="block text-sm font-medium">Full Name</label>
-                                <input id="fullName" name="fullName" type="text" required className="mt-1 block w-full p-2 border rounded-md" />
-                            </div>
+                            <>
+                                <div className="space-y-2">
+                                    <label htmlFor="fullName" className="flex items-center gap-2 text-sm font-medium"><User className="text-gray-400 w-4 h-4"/>Full Name</label>
+                                    <input id="fullName" name="fullName" value={formData.fullName} readOnly className="block w-full p-2 border rounded-md bg-gray-100 dark:bg-gray-800 cursor-not-allowed" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="dob" className="flex items-center gap-2 text-sm font-medium"><Calendar className="text-gray-400 w-4 h-4"/>Date of Birth</label>
+                                    <input id="dob" name="dob" value={formData.dob} readOnly className="block w-full p-2 border rounded-md bg-gray-100 dark:bg-gray-800 cursor-not-allowed" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="address" className="flex items-center gap-2 text-sm font-medium"><Home className="text-gray-400 w-4 h-4"/>Address</label>
+                                    <textarea id="address" name="address" value={formData.address} readOnly className="block w-full p-2 border rounded-md bg-gray-100 dark:bg-gray-800 cursor-not-allowed" rows="3" />
+                                </div>
+                            </>
                         )}
-                        <div>
-                            <label htmlFor="email" className="block text-sm font-medium">Email address</label>
-                            <input id="email" name="email" type="email" required className="mt-1 block w-full p-2 border rounded-md" />
+                        <div className="space-y-2">
+                            <label htmlFor="email" className="flex items-center gap-2 text-sm font-medium"><Mail className="text-gray-400 w-4 h-4"/>Email Address</label>
+                            <input id="email" name="email" type="email" required onChange={handleFormInputChange} value={formData.email} placeholder="you@example.com" className="mt-1 block w-full p-2 border rounded-md" />
                         </div>
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium">Password</label>
-                            <input id="password" name="password" type="password" required className="mt-1 block w-full p-2 border rounded-md" />
+                        <div className="space-y-2">
+                            <label htmlFor="password">Password</label>
+                            <input id="password" name="password" type="password" required placeholder="••••••••" className="mt-1 block w-full p-2 border rounded-md" />
                         </div>
-                        <Button type="submit" size="lg" className="w-full" disabled={!isVerified}>
+                        <Button type="submit" size="lg" className="w-full" disabled={isSignUp && !isVerified}>
                             {isSignUp ? 'Create Account & Sign In' : 'Sign In'}
                         </Button>
                     </form>
@@ -184,7 +220,7 @@ const AuthPage = () => {
 
                 <p className="text-center text-sm text-gray-500 mt-6">
                     {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-                    <button onClick={() => setIsSignUp(!isSignUp)} className="font-medium text-blue-600 hover:underline">
+                    <button onClick={() => { setIsSignUp(!isSignUp); setIsVerified(false); setShowWebcam(false); setDocImage(null); setVerificationMessage('Please upload an ID to begin.') }} className="font-medium text-blue-600 hover:underline">
                         {isSignUp ? 'Sign In' : 'Sign Up'}
                     </button>
                 </p>

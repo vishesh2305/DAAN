@@ -1,6 +1,16 @@
 import React, { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Sun, Moon, Plus, Menu, X, Heart, User, Settings, LogOut } from "lucide-react";
+import {
+  Sun,
+  Moon,
+  Plus,
+  Menu,
+  X,
+  Heart,
+  User,
+  Settings,
+  LogOut,
+} from "lucide-react";
 import { useTheme } from "../../contexts/ThemeProvider";
 import { useUser } from "../../contexts/UserProvider";
 import Button from "../common/Button";
@@ -50,6 +60,7 @@ const Header = () => {
                         <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
                             {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
                         </button>
+                        
                         {isAuthenticated ? (
                             <div className="relative">
                                 <button
@@ -73,7 +84,14 @@ const Header = () => {
                                 )}
                             </div>
                         ) : (
-                            <Button as={Link} to="/auth" variant="outline">Sign In</Button>
+                            <div className="hidden md:flex items-center space-x-2">
+                                <Link to="/auth" state={{ isSignUp: false }}>
+                                    <Button variant="outline">Sign In</Button>
+                                </Link>
+                                <Link to="/auth" state={{ isSignUp: true }}>
+                                    <Button>Sign Up</Button>
+                                </Link>
+                            </div>
                         )}
                         <button className="md:hidden p-2" onClick={() => setIsMenuOpen(!isMenuOpen)}>
                             {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -82,10 +100,25 @@ const Header = () => {
                 </div>
                 {isMenuOpen && (
                     <div className="md:hidden py-4 border-t border-gray-200 dark:border-gray-700">
-                        <nav className="flex flex-col space-y-2">
-                            <NavLink to="/" className={navLinkClasses} onClick={() => setIsMenuOpen(false)}>Home</NavLink>
-                            <NavLink to="/dashboard" className={navLinkClasses} onClick={() => setIsMenuOpen(false)}>Campaigns</NavLink>
-                            <Button onClick={handleCreateCampaignClick} className="w-full justify-center mt-2"><Plus className="h-5 w-5 mr-2" />Create Campaign</Button>
+                         <nav className="flex flex-col space-y-4">
+                            <NavLink to="/" className="text-center" onClick={() => setIsMenuOpen(false)}>Home</NavLink>
+                            <NavLink to="/dashboard" className="text-center" onClick={() => setIsMenuOpen(false)}>Campaigns</NavLink>
+                            <hr className="dark:border-gray-700"/>
+                            {isAuthenticated ? (
+                                <>
+                                    <Button onClick={handleCreateCampaignClick} className="w-full justify-center">Create Campaign</Button>
+                                    <Button as={Link} to="/profile" variant="outline" onClick={() => setIsMenuOpen(false)}>My Profile</Button>
+                                </>
+                            ) : (
+                                <div className="flex flex-col space-y-2">
+                                     <Link to="/auth" state={{ isSignUp: false }} onClick={() => setIsMenuOpen(false)}>
+                                        <Button variant="outline" className="w-full">Sign In</Button>
+                                    </Link>
+                                    <Link to="/auth" state={{ isSignUp: true }} onClick={() => setIsMenuOpen(false)}>
+                                        <Button className="w-full">Sign Up</Button>
+                                    </Link>
+                                </div>
+                            )}
                         </nav>
                     </div>
                 )}
