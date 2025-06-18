@@ -6,7 +6,6 @@ const hre = require("hardhat");
 async function main() {
   const contractAddress = "0x17492DfC8f2dbA5DceBB3A7a5dA7a80Ba3bBa620"; // TODO: contract address
   const constructorArgs = []; // TODO: add constructor params here, if any
-
   console.log("Verifying contract.");
   await verify(
     contractAddress,

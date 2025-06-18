@@ -54,7 +54,7 @@ const CreateCampaignPage = () => {
 
       // --- AI Prediction Step ---
       try {
-        const aiResponse = await fetch('http://127.0.0.1:5000/predict', {
+        const aiResponse = await fetch('http://127.0.0.1:5001/predict', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ description: formData.description }),
