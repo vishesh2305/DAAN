@@ -18,54 +18,75 @@ const ProfilePage = () => {
 
     useEffect(() => {
         const fetchData = async () => {
-            if (!window.ethereum) {
-                setError("Please install MetaMask to view your profile.");
-                setIsLoading(false);
-                return;
+    if (!window.ethereum) {
+        setError("Please install MetaMask to view your profile.");
+        setIsLoading(false);
+        return;
+    }
+
+    try {
+        setIsLoading(true);
+        const web3 = new Web3(window.ethereum);
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const currentUserAddress = accounts[0];
+        setUserAccount(currentUserAddress);
+
+        // ✅ Update wallet address in MongoDB
+        const res = await fetch("http://localhost:3000/api/update-wallet", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ blockchainAddress: currentUserAddress })
+});
+
+const data = await res.json();
+
+if (res.ok) {
+  alert(data.message || "Wallet address updated!");
+  console.log("✅ Wallet Update Success:", data);
+} else {
+  alert(data.error || "Wallet update failed.");
+  console.error("❌ Wallet Update Error:", data);
+}
+
+        // ⛓️ Contract setup
+        const contract = new web3.eth.Contract(CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS);
+        const allCampaigns = await contract.methods.getCampaigns().call();
+
+        const created = [];
+        const donated = [];
+
+        for (let i = 0; i < allCampaigns.length; i++) {
+            const campaign = allCampaigns[i];
+            const formattedCampaign = {
+                id: i,
+                owner: campaign.owner,
+                title: campaign.title,
+                target: web3.utils.fromWei(campaign.target.toString(), 'ether'),
+                amountCollected: web3.utils.fromWei(campaign.amountCollected.toString(), 'ether'),
+                image: campaign.image || 'https://placehold.co/600x400/94a3b8/ffffff?text=Daan',
+            };
+
+            if (formattedCampaign.owner.toLowerCase() === currentUserAddress.toLowerCase()) {
+                created.push(formattedCampaign);
             }
 
-            try {
-                setIsLoading(true);
-                const web3 = new Web3(window.ethereum);
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                const currentUserAddress = accounts[0];
-                setUserAccount(currentUserAddress);
-
-                const contract = new web3.eth.Contract(CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS);
-                const allCampaigns = await contract.methods.getCampaigns().call();
-
-                const created = [];
-                const donated = [];
-
-                for (let i = 0; i < allCampaigns.length; i++) {
-                    const campaign = allCampaigns[i];
-                    const formattedCampaign = {
-                        id: i,
-                        owner: campaign.owner,
-                        title: campaign.title,
-                        target: web3.utils.fromWei(campaign.target.toString(), 'ether'),
-                        amountCollected: web3.utils.fromWei(campaign.amountCollected.toString(), 'ether'),
-                        image: campaign.image || 'https://placehold.co/600x400/94a3b8/ffffff?text=Daan',
-                    };
-
-                    if (formattedCampaign.owner.toLowerCase() === currentUserAddress.toLowerCase()) {
-                        created.push(formattedCampaign);
-                    }
-
-                    const donatorsData = await contract.methods.getDonators(i).call();
-                    if (donatorsData[0].map(d => d.toLowerCase()).includes(currentUserAddress.toLowerCase())) {
-                        donated.push(formattedCampaign);
-                    }
-                }
-                setCreatedCampaigns(created);
-                setDonatedCampaigns(donated);
-            } catch (err) {
-                console.error("Failed to fetch profile data:", err);
-                setError("Could not load profile data.");
-            } finally {
-                setIsLoading(false);
+            const donatorsData = await contract.methods.getDonators(i).call();
+            if (donatorsData[0].map(d => d.toLowerCase()).includes(currentUserAddress.toLowerCase())) {
+                donated.push(formattedCampaign);
             }
-        };
+        }
+
+        setCreatedCampaigns(created);
+        setDonatedCampaigns(donated);
+    } catch (err) {
+        console.error("Failed to fetch profile data:", err);
+        setError("Could not load profile data.");
+    } finally {
+        setIsLoading(false);
+    }
+};
+
 
         fetchData();
     }, []);

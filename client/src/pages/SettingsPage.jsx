@@ -5,13 +5,17 @@ import Card from '../components/common/Card';
 import { useUser } from '../contexts/UserProvider';
 
 const SettingsPage = () => {
-    const { currentUser, updateUser, logout } = useUser();
-    const [activeTab, setActiveTab] = useState('profile');
-    const [isLoading, setIsLoading] = useState(false);
-    const [formData, setFormData] = useState({ name: currentUser.name, email: currentUser.email });
-    const [avatarPreview, setAvatarPreview] = useState(currentUser.avatar);
-    const fileInputRef = React.useRef(null);
+const { currentUser, updateUser, logout } = useUser();
+const [activeTab, setActiveTab] = useState('profile');
+const [isLoading, setIsLoading] = useState(false);
+const [formData, setFormData] = useState({
+  name: currentUser?.name || '',
+  email: currentUser?.email || ''
+});
+const [avatarPreview, setAvatarPreview] = useState(currentUser.avatar);
+const fileInputRef = React.useRef(null);
 
+    
     const handleFormChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };

@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldCheck, LoaderCircle, Lock, Heart, User, Calendar, Home, Mail, Camera } from 'lucide-react';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import { useUser } from '../contexts/UserProvider';
+
 
 const AuthPage = () => {
     const [isSignUp, setIsSignUp] = useState(true);
@@ -16,10 +17,13 @@ const AuthPage = () => {
         dob: '',
         address: '',
         email: '',
-        password: ''
+        password: '',
+        coordinates: { lat: null, lng: null }
     });
 
     const [docImage, setDocImage] = useState(null);
+    const [docImageBase64, setDocImageBase64] = useState(null);
+    const [selfieBase64, setSelfieBase64] = useState(null);
     const [isVerified, setIsVerified] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
     const [showWebcam, setShowWebcam] = useState(false);
@@ -28,6 +32,26 @@ const AuthPage = () => {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const streamRef = useRef(null);
+
+    // Fetch coordinates from IP
+    useEffect(() => {
+        const fetchLocation = async () => {
+            try {
+                const res = await fetch("https://ipapi.co/json/");
+                const data = await res.json();
+                setFormData(prev => ({
+                    ...prev,
+                    coordinates: {
+                        lat: data.latitude,
+                        lng: data.longitude
+                    }
+                }));
+            } catch (err) {
+                console.error("📡 Location fetch failed:", err);
+            }
+        };
+        fetchLocation();
+    }, []);
 
     useEffect(() => {
         if (location.state?.isSignUp !== undefined) {
@@ -52,7 +76,7 @@ const AuthPage = () => {
                         videoRef.current.srcObject = stream;
                     }
                 } catch (err) {
-                    console.error("Error accessing webcam:", err);
+                    console.error("Webcam error:", err);
                     setVerificationMessage("Webcam access denied.");
                     setShowWebcam(false);
                 }
@@ -62,21 +86,19 @@ const AuthPage = () => {
         return () => stopWebcam();
     }, [showWebcam, stopWebcam]);
 
-    const handleDocImageChange = async (event) => {
+    const handleDocImageChange = (event) => {
         const file = event.target.files?.[0];
         if (file) {
             setDocImage(file);
             setShowWebcam(true);
             setVerificationMessage('Document selected. Position your face and click Verify.');
 
-            // Convert to binary and log
             const reader = new FileReader();
-            reader.onload = () => {
-                const arrayBuffer = reader.result;
-                const uint8Array = new Uint8Array(arrayBuffer);
-                console.log("📄 Document Image (Binary):", uint8Array);
+            reader.onloadend = () => {
+                const base64String = reader.result.split(',')[1];
+                setDocImageBase64(base64String);
             };
-            reader.readAsArrayBuffer(file);
+            reader.readAsDataURL(file);
         }
     };
 
@@ -107,10 +129,12 @@ const AuthPage = () => {
                 return;
             }
 
-            // Convert selfie blob to binary and log
-            const selfieBuffer = await blob.arrayBuffer();
-            const selfieBinary = new Uint8Array(selfieBuffer);
-            console.log("📸 Selfie Image (Binary):", selfieBinary);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result.split(',')[1];
+                setSelfieBase64(base64String);
+            };
+            reader.readAsDataURL(blob);
 
             const apiFormData = new FormData();
             apiFormData.append('document', docImage);
@@ -124,22 +148,16 @@ const AuthPage = () => {
 
                 const data = await response.json();
                 setVerificationMessage(data.message);
-                console.log("✅ Backend Response:", data);
 
                 if (response.ok && data.verification_status === "Verified") {
                     setIsVerified(true);
                     setShowWebcam(false);
 
-                    // Log extracted values
-                    console.log("📌 Extracted Name:", data.extracted_data?.name);
-                    console.log("📌 Extracted DOB:", data.extracted_data?.dob);
-                    console.log("📌 Extracted Address:", data.extracted_data?.address);
-
                     setFormData(prev => ({
                         ...prev,
-                        fullName: data.extracted_data.name || 'Could not read name',
-                        dob: data.extracted_data.dob || 'Could not read DOB',
-                        address: data.extracted_data.address || 'Could not read address',
+                        fullName: data.extracted_data.name || '',
+                        dob: data.extracted_data.dob || '',
+                        address: data.extracted_data.address || ''
                     }));
                 }
             } catch (error) {
@@ -151,21 +169,78 @@ const AuthPage = () => {
         }, 'image/jpeg');
     };
 
-    const handleAuthSubmit = (e) => {
+    const handleAuthSubmit = async (e) => {
         e.preventDefault();
-        console.log("🚀 Submitting Registration Form:", formData);
-        login(formData);
-        navigate('/dashboard');
+
+        if (isSignUp) {
+            // SIGNUP FLOW
+            try {
+                const res = await fetch("http://localhost:3000/api/signup", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        name: formData.fullName,
+                        dob: formData.dob,
+                        location: formData.address,
+                        email: formData.email,
+                        password: formData.password,
+                        govtImage: docImageBase64,
+                        selfieImage: selfieBase64,
+                        blockchainAddress: "0x123abc456def789ghi",
+                        coordinates: formData.coordinates,
+                    }),
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    login(data.user || formData); // fallback to local
+                    navigate("/dashboard");
+                } else {
+                    alert("Signup failed: " + data.error);
+                }
+            } catch (err) {
+                console.error("Signup error:", err);
+                alert("Signup failed.");
+            }
+
+        } else {
+            // LOGIN FLOW
+            try {
+                const res = await fetch("http://localhost:3000/api/login", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        email: formData.email,
+                        password: formData.password
+                    }),
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    login(data.user);
+                    navigate("/dashboard");
+                } else {
+                    alert("Login failed: " + data.error);
+                }
+            } catch (err) {
+                console.error("Login error:", err);
+                alert("Login failed.");
+            }
+        }
     };
 
     return (
         <main className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
             <Card className="w-full max-w-lg">
+                {/* Top header */}
                 <div className="text-center mb-6">
                     <Heart className="mx-auto h-12 w-12 text-blue-600" />
                     <h2 className="mt-4 text-2xl font-bold">{isSignUp ? 'Create Your Secure Account' : 'Sign In'}</h2>
                 </div>
 
+                {/* Step 1 - Verification */}
                 {!isVerified && isSignUp && (
                     <div className="mb-6 p-4 border rounded-lg dark:border-gray-700">
                         <h3 className="font-semibold flex items-center mb-2">
@@ -191,50 +266,28 @@ const AuthPage = () => {
                     </div>
                 )}
 
-                {isVerified && isSignUp && (
-                    <div className="p-4 text-center bg-green-100 dark:bg-green-900/50 rounded-lg mb-4">
-                        <ShieldCheck className="h-8 w-8 mx-auto text-green-600" />
-                        <p className="font-semibold mt-2 text-green-800 dark:text-green-200">Verification Successful!</p>
-                        <p className="text-sm text-green-700 dark:text-green-300">Please confirm your details and set a password.</p>
-                    </div>
-                )}
+                {/* Step 2 - Auth Form */}
+                <form onSubmit={handleAuthSubmit} className={`${isSignUp && !isVerified ? 'opacity-30 pointer-events-none' : ''} space-y-4 mt-4`}>
+                    {isSignUp && (
+                        <>
+                            <label className="block text-sm font-medium">Full Name</label>
+                            <input name="fullName" value={formData.fullName} readOnly className="block w-full p-2 border rounded-md bg-gray-100" />
+                            <label className="block text-sm font-medium">Date of Birth</label>
+                            <input name="dob" value={formData.dob} readOnly className="block w-full p-2 border rounded-md bg-gray-100" />
+                            <label className="block text-sm font-medium">Address</label>
+                            <textarea name="address" value={formData.address} readOnly className="block w-full p-2 border rounded-md bg-gray-100" />
+                        </>
+                    )}
+                    <label className="block text-sm font-medium">Email</label>
+                    <input name="email" type="email" value={formData.email} onChange={handleFormInputChange} required className="block w-full p-2 border rounded-md" />
+                    <label className="block text-sm font-medium">Password</label>
+                    <input name="password" type="password" onChange={handleFormInputChange} required className="block w-full p-2 border rounded-md" />
+                    <Button type="submit" size="lg" className="w-full" disabled={isSignUp && !isVerified}>
+                        {isSignUp ? 'Create Account & Sign In' : 'Sign In'}
+                    </Button>
+                </form>
 
-                <div className={`${isSignUp && !isVerified ? 'opacity-30 pointer-events-none' : ''}`}>
-                    <h3 className="font-semibold flex items-center mb-2">
-                        <Lock className="h-5 w-5 mr-2 text-blue-500" />
-                        {isSignUp ? 'Step 2: Confirm & Secure Your Account' : 'Login to your account'}
-                    </h3>
-                    <form onSubmit={handleAuthSubmit} className="space-y-4 mt-4">
-                        {isSignUp && (
-                            <>
-                                <div className="space-y-2">
-                                    <label htmlFor="fullName" className="flex items-center gap-2 text-sm font-medium"><User className="text-gray-400 w-4 h-4" />Full Name</label>
-                                    <input id="fullName" name="fullName" value={formData.fullName} readOnly className="block w-full p-2 border rounded-md bg-gray-100 dark:bg-gray-800 cursor-not-allowed" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label htmlFor="dob" className="flex items-center gap-2 text-sm font-medium"><Calendar className="text-gray-400 w-4 h-4" />Date of Birth</label>
-                                    <input id="dob" name="dob" value={formData.dob} readOnly className="block w-full p-2 border rounded-md bg-gray-100 dark:bg-gray-800 cursor-not-allowed" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label htmlFor="address" className="flex items-center gap-2 text-sm font-medium"><Home className="text-gray-400 w-4 h-4" />Address</label>
-                                    <textarea id="address" name="address" value={formData.address} readOnly className="block w-full p-2 border rounded-md bg-gray-100 dark:bg-gray-800 cursor-not-allowed" rows="3" />
-                                </div>
-                            </>
-                        )}
-                        <div className="space-y-2">
-                            <label htmlFor="email" className="flex items-center gap-2 text-sm font-medium"><Mail className="text-gray-400 w-4 h-4" />Email Address</label>
-                            <input id="email" name="email" type="email" required onChange={handleFormInputChange} value={formData.email} placeholder="you@example.com" className="mt-1 block w-full p-2 border rounded-md" />
-                        </div>
-                        <div className="space-y-2">
-                            <label htmlFor="password">Password</label>
-                            <input id="password" name="password" type="password" required placeholder="••••••••" className="mt-1 block w-full p-2 border rounded-md" />
-                        </div>
-                        <Button type="submit" size="lg" className="w-full" disabled={isSignUp && !isVerified}>
-                            {isSignUp ? 'Create Account & Sign In' : 'Sign In'}
-                        </Button>
-                    </form>
-                </div>
-
+                {/* Toggle link */}
                 <p className="text-center text-sm text-gray-500 mt-6">
                     {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
                     <button onClick={() => {
