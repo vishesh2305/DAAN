@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-
+import defaultprofileimg from "../assets/images/default_profile_image.jpg"
 const UserContext = createContext();
 
 export const useUser = () => useContext(UserContext);
@@ -22,7 +22,7 @@ export const UserProvider = ({ children }) => {
         const user = {
             name: userData.name || userData.fullName || '',
             email: userData.email || '',
-            avatar: userData.avatar || 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
+            avatar: userData.avatar || defaultprofileimg,
         };
         setCurrentUser(user);
         setIsAuthenticated(true);
