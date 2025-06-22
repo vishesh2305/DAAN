@@ -33,14 +33,15 @@ userSchema.plugin(encrypt, {
     "name",
     "dob",
     "location",
-    "email",
-    "password",
+    "password", // KEEP encrypted
     "govtImage",
     "selfieImage",
     "blockchainAddress",
     "createdAt",
-    "coordinates",
-  ],
+    "coordinates"
+    // "email" ❌ REMOVE this
+  ]
 });
+
 
 module.exports = mongoose.model("User", userSchema); 

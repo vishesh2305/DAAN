@@ -29,11 +29,26 @@ export const UserProvider = ({ children }) => {
         localStorage.setItem("user", JSON.stringify(user)); // ✅ save to localStorage
     };
 
-    const logout = () => {
-        setCurrentUser(null);
-        setIsAuthenticated(false);
-        localStorage.removeItem("user"); // ✅ remove on logout
-    };
+const logout = async () => {
+  try {
+    const res = await fetch("http://localhost:3000/api/logout", {
+      method: "POST",
+      credentials: "include", // ⬅️ VERY IMPORTANT to send cookies (session ID)
+    });
+
+    const data = await res.json();
+    console.log("🚪 Logout response:", data.message);
+
+    // Now update local state
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    localStorage.removeItem("user");
+  } catch (err) {
+    console.error("Logout failed:", err);
+    alert("Logout request failed.");
+  }
+};
+
 
     const updateUser = (newDetails) => {
         const updatedUser = { ...currentUser, ...newDetails };
