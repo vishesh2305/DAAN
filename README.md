@@ -1,11 +1,7 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/vishesh2305/daan/main/client/src/assets/images/logo.png" alt="Daan Logo" width="150">
   <h1 align="center">Daan: A Trustworthy Web3 Crowdfunding Platform</h1>
   <p align="center">
     Secure, Transparent, and Smarter Giving, powered by Blockchain and AI.
-    <br />
-    <a href="http://localhost:5173/dashboard"><strong>Explore the Live Demo »</strong></a>
-    <br />
     <br />
     <a href="https://github.com/vishesh2305/daan/issues">Report Bug</a>
     ·
@@ -23,7 +19,7 @@
 ## About The Project
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/vishesh2305/daan/main/client/src/assets/images/Daan_Landing_Page.png" alt="Daan Landing Page">
+  <img src="../DAAN/client/src/assets/images/landing_page_image.png" alt="Daan Landing Page">
 </p>
 
 Daan addresses the critical flaws in traditional crowdfunding platforms: lack of trust, risk of fraud, and the inefficient use of donated funds. We provide a comprehensive solution that leverages cutting-edge technology to create a secure, transparent, and more impactful giving experience.
