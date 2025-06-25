@@ -8,6 +8,7 @@ export const UserProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+    const [loading, setLoading] = useState(true);
     // Restore session from localStorage
     useEffect(() => {
         const storedUser = localStorage.getItem("user");
@@ -16,6 +17,7 @@ export const UserProvider = ({ children }) => {
             setCurrentUser(user);
             setIsAuthenticated(true);
         }
+        setLoading(false);
     }, []);
 
     const login = (userData) => {
@@ -26,14 +28,14 @@ export const UserProvider = ({ children }) => {
         };
         setCurrentUser(user);
         setIsAuthenticated(true);
-        localStorage.setItem("user", JSON.stringify(user)); // ✅ save to localStorage
+        localStorage.setItem("user", JSON.stringify(user)); 
     };
 
 const logout = async () => {
   try {
     const res = await fetch("http://localhost:3000/api/logout", {
       method: "POST",
-      credentials: "include", // ⬅️ VERY IMPORTANT to send cookies (session ID)
+      credentials: "include", 
     });
 
     const data = await res.json();
@@ -57,7 +59,7 @@ const logout = async () => {
     };
 
     return (
-        <UserContext.Provider value={{ currentUser, isAuthenticated, updateUser, logout, login }}>
+        <UserContext.Provider value={{ currentUser, isAuthenticated,loading, updateUser, logout, login }}>
             {children}
         </UserContext.Provider>
     );
