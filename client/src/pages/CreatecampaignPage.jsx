@@ -27,7 +27,7 @@ const CreateCampaignPage = () => {
         if (notification.show) {
             const timer = setTimeout(() => {
                 setNotification({ show: false, message: '', type: '' });
-            }, 5000); // Auto-hide after 5 seconds
+            }, 5000);
             return () => clearTimeout(timer);
         }
     }, [notification.show]);
@@ -56,8 +56,14 @@ const CreateCampaignPage = () => {
         if (!formData.fundingGoal) newErrors.fundingGoal = "Funding goal is required.";
         if (!formData.deadline) {
             newErrors.deadline = "Campaign deadline is required.";
-        } else if (new Date(formData.deadline) <= new Date()) {
-            newErrors.deadline = "Deadline must be a future date.";
+        } else {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const deadlineParts = formData.deadline.split('-').map(Number);
+            const selectedDate = new Date(deadlineParts[0], deadlineParts[1] - 1, deadlineParts[2]);
+            if (selectedDate < today) {
+                newErrors.deadline = "Deadline must be today or a future date.";
+            }
         }
         if (formData.mediaFiles.length === 0) newErrors.media = "At least one image or video is required.";
         setErrors(newErrors);
@@ -68,10 +74,7 @@ const CreateCampaignPage = () => {
         event.preventDefault();
         setNotification({ show: false, message: '', type: '' });
         if (!validate()) return;
-        
         setIsLoading(true);
-
-        // --- AI Prediction Step ---
         try {
             const aiResponse = await fetch('http://127.0.0.1:5001/predict', {
                 method: 'POST',
@@ -80,41 +83,34 @@ const CreateCampaignPage = () => {
             });
             if (!aiResponse.ok) throw new Error('AI server responded with an error.');
             const aiData = await aiResponse.json();
-
             if (aiData.prediction !== 'Genuine') {
                 setNotification({ show: true, message: `Campaign Flagged: Our AI has doubts about this campaign (${aiData.prediction}). Please revise your description.`, type: 'error' });
                 setIsLoading(false);
                 return;
             }
-            
             setNotification({ show: true, message: 'AI check passed! Please confirm the transaction in your wallet.', type: 'info' });
-
         } catch (aiError) {
             console.error("AI prediction failed:", aiError);
             setNotification({ show: true, message: 'Could not connect to the AI analysis server. Please try again later.', type: 'error' });
             setIsLoading(false);
             return;
         }
-
-        // --- Blockchain Transaction Step ---
         try {
             if (!window.ethereum) {
                 setNotification({ show: true, message: 'Please install MetaMask to create a campaign!', type: 'error' });
                 setIsLoading(false);
                 return;
             }
-
             await window.ethereum.request({ method: 'eth_requestAccounts' });
             const web3 = new Web3(window.ethereum);
             const accounts = await web3.eth.getAccounts();
             const userAddress = accounts[0];
             const contract = new web3.eth.Contract(CROWDFUNDING_ABI, CROWDFUNDING_CONTRACT_ADDRESS);
             const targetInWei = web3.utils.toWei(formData.fundingGoal, 'ether');
-            
-            const deadlineDate = new Date(formData.deadline);
+            const deadlineParts = formData.deadline.split('-').map(Number);
+            const deadlineDate = new Date(deadlineParts[0], deadlineParts[1] - 1, deadlineParts[2]);
             deadlineDate.setHours(23, 59, 59, 999);
             const deadlineInSeconds = Math.floor(deadlineDate.getTime() / 1000);
-
             await contract.methods.createCampaign(
                 userAddress,
                 formData.title,
@@ -123,10 +119,8 @@ const CreateCampaignPage = () => {
                 deadlineInSeconds,
                 "YOUR_IMAGE_URL_OR_IPFS_HASH"
             ).send({ from: userAddress });
-
             setNotification({ show: true, message: 'Campaign created successfully! Redirecting...', type: 'success' });
             setTimeout(() => navigate('/dashboard'), 2000);
-            
         } catch (error) {
             console.error("Error creating campaign:", error);
             setNotification({ show: true, message: `Transaction failed: User denied transaction or an error occurred.`, type: 'error' });
@@ -153,14 +147,12 @@ const CreateCampaignPage = () => {
                         onClose={() => setNotification({ show: false, message: '', type: '' })}
                     />
                 )}
-                
                 <div className="text-center mb-8">
                     <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Start Your Campaign</h1>
                     <p className="text-md text-gray-600 dark:text-gray-300 mt-2">Bring your idea to life with the support of the community.</p>
                 </div>
                 <Card className="p-6 sm:p-8">
                     <form className="space-y-6" onSubmit={handleLaunchCampaign} noValidate>
-                        {/* Section 1 */}
                         <div>
                             <h3 className="font-bold text-lg mb-2 flex items-center">
                                 <Lightbulb className="h-5 w-5 mr-2 text-yellow-500"/> 1. The Big Idea
@@ -177,10 +169,7 @@ const CreateCampaignPage = () => {
                                 </div>
                             </div>
                         </div>
-                        
                         <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                        {/* Section 2 */}
                         <div>
                             <h3 className="font-bold text-lg mb-2 flex items-center"><FileText className="h-5 w-5 mr-2 text-blue-500"/> 2. Your Story</h3>
                             <div>
@@ -208,10 +197,7 @@ const CreateCampaignPage = () => {
                                 )}
                             </div>
                         </div>
-                        
                         <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                        {/* Section 3 */}
                         <div>
                             <h3 className="font-bold text-lg mb-2 flex items-center"><DollarSign className="h-5 w-5 mr-2 text-green-500"/> 3. Funding & Details</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -237,8 +223,6 @@ const CreateCampaignPage = () => {
                                 </div>
                             </div>
                         </div>
-
-                        {/* Submit Button */}
                         <div className="flex justify-end pt-4">
                             <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={isLoading}>
                                 {isLoading ? <LoaderCircle className="animate-spin" /> : 'Launch Campaign'}
